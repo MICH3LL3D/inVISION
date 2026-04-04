@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="media/inVISION_logo.png" alt="inVISION Logo" width="50%" height=auto>
+  <img src="/inVISION_logo.png" alt="inVISION Logo" width="50%" height=auto>
   <br>
   <i>“description.”</i>
   <br>
