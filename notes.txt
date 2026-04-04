@@ -1,0 +1,26 @@
+initial goal for today:
+brainstorm hand controls
+wireframe visualizer (pure 2d) built
+    understanding
+
+hand controls:
+callibration step: setting standard measurements for hand / finger distance
+
+using angle of line between keypoint to determine hand orientation
+dude i just had the biggest brain maneuver
+(april 1 10:10 pm)
+so remember the right hand rule from physics
+so its just that.
+and the rotation of your right hand is just like
+the actual space
+holy i MIGHT be thinking
+
+so i have even more thoughts
+if we have a camera recognition setup and the object projected we can effectively create a hologram
+detect the hands and the points nearest to the fingers at pinch
+motion of the pinched hand will move the visualizer
+
+so its similar but not exactly the same
+it's kind of like a hologram but feasible and COST EFFICIENT HOLY SHIT.
+
+okay so im thinking we calculate depth with some hand metric that doesnt change, such as the normalization metric
