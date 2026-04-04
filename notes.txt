@@ -24,3 +24,12 @@ so its similar but not exactly the same
 it's kind of like a hologram but feasible and COST EFFICIENT HOLY SHIT.
 
 okay so im thinking we calculate depth with some hand metric that doesnt change, such as the normalization metric
+
+what the frick
+"Euler-angle decomposition causing axis coupling"
+kms
+
+challenges
+everything
+x y z vs pitch yaw roll vs matrix rotation vs relative axis decoupling 
+creating an intuitive control scheme
