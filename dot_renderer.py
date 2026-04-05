@@ -364,10 +364,8 @@ def triangle_screen_bounds(poly):
     return min(xs), min(ys), max(xs), max(ys)
 
 def draw_obj_vertices(screen, vertices_np, display_R, scale, fov, camera_distance):
-    # Transform all vertices
-    transformed = (vertices_np * scale) @ display_R.T   # (N, 3)
+    transformed = (vertices_np * scale) @ display_R.T
 
-    # Project
     z = transformed[:, 2] + camera_distance
     valid = z > 1.0
 
@@ -377,7 +375,6 @@ def draw_obj_vertices(screen, vertices_np, display_R, scale, fov, camera_distanc
     screen_x = transformed[:, 0] * factor + WIDTH / 2
     screen_y = -transformed[:, 1] * factor + HEIGHT / 2
 
-    # Draw points
     for i in range(len(vertices_np)):
         if not valid[i]:
             continue
@@ -385,14 +382,26 @@ def draw_obj_vertices(screen, vertices_np, display_R, scale, fov, camera_distanc
         x = int(screen_x[i])
         y = int(screen_y[i])
 
-        # Optional: size based on depth (cool effect)
+        if x < 0 or x > WIDTH or y < 0 or y > HEIGHT:
+            continue
+
         size = int(4 + 200 / z_safe[i])
         size = max(2, min(size, 8))
 
-        pygame.draw.circle(screen, (100, 200, 255), (x, y), size)
+        # depth -> color
+        z_norm = (z_safe[i] - 50) / 1000
+        z_norm = max(0.0, min(1.0, z_norm))
+        brightness = 1.0 - z_norm
+
+        r = int(255 * brightness)
+        g = int(100 * (1 - brightness))
+        b = int(255 * (1 - brightness))
+        color = (r, g, b)
+
+        pygame.draw.circle(screen, color, (x, y), size)
 
 # OBJ model
-OBJ_PATH = "mesh_small.obj"   # change this to file name
+OBJ_PATH = "mesh_remesher.obj"   # change this to file name
 vertices, faces = load_obj(OBJ_PATH)
 vertices = normalize_model(vertices, target_size=2.0)
 

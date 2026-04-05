@@ -95,7 +95,7 @@ BG = (20, 20, 30)
 WHITE = (240, 240, 240)
 BLUE = (100, 200, 255)
 TARGET_FPS = 30
-FACE_STEP = 2
+FACE_STEP = 5
 
 pygame.init()
 pygame.font.init()
@@ -436,7 +436,7 @@ def draw_obj_model_numpy(screen, vertices_np, faces_np, display_R, scale, fov, c
         pygame.draw.polygon(screen, WHITE, poly, 1)
 
 # OBJ model
-OBJ_PATH = "mesh_small.obj"   # change this to file name
+OBJ_PATH = "mesh_remesher.obj"   # change this to file name
 vertices, faces = load_obj(OBJ_PATH)
 vertices = normalize_model(vertices, target_size=2.0)
 
