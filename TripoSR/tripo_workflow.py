@@ -10,6 +10,9 @@ from run import TripoSRRunner
 from utils import Timer, ensure_dir, save_json, safe_stem
 
 
+# Default export path: inVISION repo root / model.obj (parent of TripoSR/)
+_DEFAULT_MODEL_OUT = Path(__file__).resolve().parent.parent / "model.obj"
+
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO,
@@ -25,6 +28,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("image", type=str, help="Path to the main input image.")
     parser.add_argument("--output-dir", type=str, default="output_hybrid")
+    parser.add_argument(
+        "--model-out",
+        type=str,
+        default=str(_DEFAULT_MODEL_OUT),
+        help="Path where the reconstructed mesh is always copied as the canonical model.obj.",
+    )
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--mc-resolution", type=int, default=384)
     parser.add_argument("--chunk-size", type=int, default=8192)
@@ -107,11 +116,16 @@ def main() -> None:
     base = runner.run(main_pre["tripo_input_path"], root / "base_mesh")
     timer.end("Running base TripoSR reconstruction")
     
-    final_mesh_path = str(root / "final_mesh.obj")
-    
-    Path(final_mesh_path).write_bytes(Path(base["mesh_path"]).read_bytes())
+    mesh_src = Path(base["mesh_path"])
+    final_mesh_path = root / "final_mesh.obj"
+    final_mesh_path.write_bytes(mesh_src.read_bytes())
 
-    logging.info("Done. Final mesh: %s", final_mesh_path)
+    model_out = Path(args.model_out)
+    model_out.parent.mkdir(parents=True, exist_ok=True)
+    model_out.write_bytes(mesh_src.read_bytes())
+
+    logging.info("Done. Run output mesh: %s", final_mesh_path)
+    logging.info("Canonical model (inVISION root): %s", model_out.resolve())
 
 
 if __name__ == "__main__":

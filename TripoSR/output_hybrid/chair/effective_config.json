@@ -1,0 +1,25 @@
+{
+  "preprocess": {
+    "target_size": 512,
+    "foreground_ratio": 0.92,
+    "contrast": 1.08,
+    "sharpness": 1.12,
+    "edge_feather_px": 2,
+    "mask_close_kernel": 5,
+    "mask_open_kernel": 3,
+    "pad_ratio": 0.08,
+    "white_bg": false
+  },
+  "reconstruction": {
+    "pretrained_model_name_or_path": "stabilityai/TripoSR",
+    "device": "cuda:0",
+    "chunk_size": 8192,
+    "mc_resolution": 384,
+    "model_save_format": "obj",
+    "bake_texture": false,
+    "texture_resolution": 2048,
+    "render": false,
+    "keep_components": 4,
+    "taubin_iters": 10
+  }
+}

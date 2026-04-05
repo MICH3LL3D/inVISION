@@ -1,0 +1,7 @@
+{
+  "input_image": "output_hybrid/chair/main/preprocessed_for_triposr.png",
+  "mesh_path": "output_hybrid/chair/base_mesh/mesh.obj",
+  "device": "cpu",
+  "mc_resolution": 384,
+  "chunk_size": 8192
+}

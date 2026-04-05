@@ -1,0 +1,28 @@
+{
+  "raw_size": [
+    4032,
+    3024
+  ],
+  "processed_size": [
+    512,
+    512
+  ],
+  "object_fraction": 0.19896697998046875,
+  "bbox": [
+    126,
+    35,
+    385,
+    476
+  ],
+  "config": {
+    "target_size": 512,
+    "foreground_ratio": 0.92,
+    "contrast": 1.08,
+    "sharpness": 1.12,
+    "edge_feather_px": 2,
+    "mask_close_kernel": 5,
+    "mask_open_kernel": 3,
+    "pad_ratio": 0.08,
+    "white_bg": false
+  }
+}

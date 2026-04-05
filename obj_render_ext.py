@@ -1,5 +1,7 @@
 # Main file with best control scheme
 
+from pathlib import Path
+
 import mediapipe as mp
 import numpy as np
 import cv2
@@ -16,6 +18,49 @@ VisionRunningMode = mp.tasks.vision.RunningMode
 # ---------------------------------------------------------------------------
 # Pure utility functions
 # ---------------------------------------------------------------------------
+
+# face_step scales ~linearly with .obj size on disk: ref_mib → ref_step (default 2.8 MiB → 5).
+_FACE_STEP_REF_MIB = 2
+_FACE_STEP_REF_VALUE = 5
+_FACE_STEP_MIN = 1
+_FACE_STEP_MAX = 50
+
+
+def face_step_for_obj_size(
+    size_bytes: int,
+    *,
+    ref_mib: float = _FACE_STEP_REF_MIB,
+    ref_step: int = _FACE_STEP_REF_VALUE,
+    min_step: int = _FACE_STEP_MIN,
+    max_step: int = _FACE_STEP_MAX,
+) -> int:
+    """Pick render stride from file size: ``round(ref_step * size / (ref_mib * MiB))``, clamped."""
+    ref_bytes = ref_mib * 1024 * 1024
+    if size_bytes <= 0 or ref_bytes <= 0:
+        return max(min_step, min(ref_step, max_step))
+    step = round(ref_step * size_bytes / ref_bytes)
+    return max(min_step, min(step, max_step))
+
+
+def face_step_from_obj_path(
+    path: str | Path,
+    *,
+    ref_mib: float = _FACE_STEP_REF_MIB,
+    ref_step: int = _FACE_STEP_REF_VALUE,
+    min_step: int = _FACE_STEP_MIN,
+    max_step: int = _FACE_STEP_MAX,
+) -> int:
+    p = Path(path)
+    if not p.is_file():
+        return ref_step
+    return face_step_for_obj_size(
+        p.stat().st_size,
+        ref_mib=ref_mib,
+        ref_step=ref_step,
+        min_step=min_step,
+        max_step=max_step,
+    )
+
 
 def distance2d(p1, p2, width, height):
     x1, y1 = p1.x * width, p1.y * height
@@ -311,8 +356,9 @@ class ObjectViewerApp:
         Pygame window dimensions.
     target_fps : int
         Desired frame rate.
-    face_step : int
-        Render every N-th face (higher = faster but lower quality).
+    face_step : int or None
+        Render every N-th face (higher = faster but lower quality). If None, derived from
+        ``.obj`` file size (~2.8 MiB → 5).
     model_path : str
         Path to the hand_landmarker.task model file.
 
@@ -334,14 +380,17 @@ class ObjectViewerApp:
         width=1000,
         height=700,
         target_fps=30,
-        face_step=5,
+        face_step=None,
         model_path="hand_landmarker.task",
     ):
         self.obj_path   = obj_path
         self.width      = width
         self.height     = height
         self.target_fps = target_fps
-        self.face_step  = face_step
+        if face_step is None:
+            self.face_step = face_step_from_obj_path(obj_path)
+        else:
+            self.face_step = max(1, int(face_step))
         self.model_path = model_path
 
         # Smoothing / sensitivity tuning
@@ -368,7 +417,7 @@ class ObjectViewerApp:
 
     def run(self):
         """Open the camera and run the interactive viewer until the window is closed."""
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(1)
         if not cap.isOpened():
             raise RuntimeError("Cannot open camera")
 
