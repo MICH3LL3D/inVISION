@@ -1,4 +1,5 @@
 # Proof of concept with vertical hand motion scrolling
+# This one's ass
 
 import mediapipe as mp
 import numpy as np
