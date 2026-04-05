@@ -1,24 +1,92 @@
-import argparse
+from __future__ import annotations
+
 import logging
 import os
-import time
+from pathlib import Path
+from typing import Dict
 
 import numpy as np
-import rembg
+import open3d as o3d
 import torch
 import xatlas
 from PIL import Image
 
-from tsr.system import TSR
-from tsr.utils import remove_background, resize_foreground, save_video
 from tsr.bake_texture import bake_texture
+from tsr.system import TSR
+from tsr.utils import save_video
 
-import open3d as o3d
+from config import ReconstructionConfig
+from utils import ensure_dir, save_json
 
-def clean_and_smooth_mesh(tri_mesh, keep_components=4, taubin_iters=10):
-    import numpy as np
-    import open3d as o3d
 
+class TripoSRRunner:
+    def __init__(self, cfg: ReconstructionConfig) -> None:
+        self.cfg = cfg
+        self.device = cfg.device
+        if not torch.cuda.is_available():
+            self.device = "cpu"
+        self.model = TSR.from_pretrained(
+            cfg.pretrained_model_name_or_path,
+            config_name="config.yaml",
+            weight_name="model.ckpt",
+        )
+        self.model.renderer.set_chunk_size(cfg.chunk_size)
+        self.model.to(self.device)
+
+    def run(self, image_path: str, out_dir: str | Path) -> Dict:
+        out_dir = ensure_dir(out_dir)
+        image = Image.open(image_path).convert("RGB")
+
+        with torch.no_grad():
+            scene_codes = self.model([image], device=self.device)
+
+        if self.cfg.render:
+            render_dir = ensure_dir(out_dir / "renders")
+            render_images = self.model.render(scene_codes, n_views=30, return_type="pil")
+            for ri, render_image in enumerate(render_images[0]):
+                render_image.save(render_dir / f"render_{ri:03d}.png")
+            save_video(render_images[0], str(out_dir / "render.mp4"), fps=30)
+
+        meshes = self.model.extract_mesh(
+            scene_codes,
+            not self.cfg.bake_texture,
+            resolution=self.cfg.mc_resolution,
+        )
+        out_mesh_path = out_dir / f"mesh.{self.cfg.model_save_format}"
+
+        if self.cfg.bake_texture:
+            out_texture_path = out_dir / "texture.png"
+            bake_output = bake_texture(meshes[0], self.model, scene_codes[0], self.cfg.texture_resolution)
+            xatlas.export(
+                str(out_mesh_path),
+                meshes[0].vertices[bake_output["vmapping"]],
+                bake_output["indices"],
+                bake_output["uvs"],
+                meshes[0].vertex_normals[bake_output["vmapping"]],
+            )
+            Image.fromarray((bake_output["colors"] * 255.0).astype(np.uint8)).transpose(
+                Image.FLIP_TOP_BOTTOM
+            ).save(out_texture_path)
+        else:
+            clean_mesh = clean_and_smooth_mesh(
+                meshes[0],
+                keep_components=self.cfg.keep_components,
+                taubin_iters=self.cfg.taubin_iters,
+            )
+            o3d.io.write_triangle_mesh(str(out_mesh_path), clean_mesh)
+
+        meta = {
+            "input_image": str(image_path),
+            "mesh_path": str(out_mesh_path),
+            "device": self.device,
+            "mc_resolution": self.cfg.mc_resolution,
+            "chunk_size": self.cfg.chunk_size,
+        }
+        save_json(out_dir / "reconstruction_meta.json", meta)
+        return meta
+
+
+def clean_and_smooth_mesh(tri_mesh, keep_components: int = 4, taubin_iters: int = 10):
     vertices = np.asarray(tri_mesh.vertices)
     faces = np.asarray(tri_mesh.faces)
 
@@ -39,205 +107,15 @@ def clean_and_smooth_mesh(tri_mesh, keep_components=4, taubin_iters=10):
     if len(cluster_n_triangles) > 0:
         largest_ids = np.argsort(cluster_n_triangles)[::-1][:keep_components]
         keep_mask = np.isin(triangle_clusters, largest_ids)
-
         triangles_to_remove = np.where(~keep_mask)[0].tolist()
         mesh.remove_triangles_by_index(triangles_to_remove)
         mesh.remove_unreferenced_vertices()
 
     mesh = mesh.filter_smooth_taubin(number_of_iterations=taubin_iters)
-
     mesh.remove_duplicated_vertices()
     mesh.remove_duplicated_triangles()
     mesh.remove_degenerate_triangles()
     mesh.remove_non_manifold_edges()
     mesh.remove_unreferenced_vertices()
     mesh.compute_vertex_normals()
-
     return mesh
-
-class Timer:
-    def __init__(self):
-        self.items = {}
-        self.time_scale = 1000.0  # ms
-        self.time_unit = "ms"
-
-    def start(self, name: str) -> None:
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-        self.items[name] = time.time()
-        logging.info(f"{name} ...")
-
-    def end(self, name: str) -> float:
-        if name not in self.items:
-            return
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-        start_time = self.items.pop(name)
-        delta = time.time() - start_time
-        t = delta * self.time_scale
-        logging.info(f"{name} finished in {t:.2f}{self.time_unit}.")
-
-
-timer = Timer()
-
-
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-parser = argparse.ArgumentParser()
-parser.add_argument("image", type=str, nargs="+", help="Path to input image(s).")
-parser.add_argument(
-    "--device",
-    default="cuda:0",
-    type=str,
-    help="Device to use. If no CUDA-compatible device is found, will fallback to 'cpu'. Default: 'cuda:0'",
-)
-parser.add_argument(
-    "--pretrained-model-name-or-path",
-    default="stabilityai/TripoSR",
-    type=str,
-    help="Path to the pretrained model. Could be either a huggingface model id is or a local path. Default: 'stabilityai/TripoSR'",
-)
-parser.add_argument(
-    "--chunk-size",
-    default=8192,
-    type=int,
-    help="Evaluation chunk size for surface extraction and rendering. Smaller chunk size reduces VRAM usage but increases computation time. 0 for no chunking. Default: 8192",
-)
-parser.add_argument(
-    "--mc-resolution",
-    default=384,
-    type=int,
-    help="Marching cubes grid resolution. Default: 256"
-)
-parser.add_argument(
-    "--no-remove-bg",
-    action="store_true",
-    help="If specified, the background will NOT be automatically removed from the input image, and the input image should be an RGB image with gray background and properly-sized foreground. Default: false",
-)
-parser.add_argument(
-    "--foreground-ratio",
-    default=0.94,
-    type=float,
-    help="Ratio of the foreground size to the image size. Only used when --no-remove-bg is not specified. Default: 0.85",
-)
-parser.add_argument(
-    "--output-dir",
-    default="output/",
-    type=str,
-    help="Output directory to save the results. Default: 'output/'",
-)
-parser.add_argument(
-    "--model-save-format",
-    default="obj",
-    type=str,
-    choices=["obj", "glb"],
-    help="Format to save the extracted mesh. Default: 'obj'",
-)
-parser.add_argument(
-    "--bake-texture",
-    action="store_true",
-    help="Bake a texture atlas for the extracted mesh, instead of vertex colors",
-)
-parser.add_argument(
-    "--texture-resolution",
-    default=2048,
-    type=int,
-    help="Texture atlas resolution, only useful with --bake-texture. Default: 2048"
-)
-parser.add_argument(
-    "--render",
-    action="store_true",
-    help="If specified, save a NeRF-rendered video. Default: false",
-)
-args = parser.parse_args()
-
-output_dir = args.output_dir
-os.makedirs(output_dir, exist_ok=True)
-
-device = args.device
-if not torch.cuda.is_available():
-    device = "cpu"
-
-timer.start("Initializing model")
-model = TSR.from_pretrained(
-    args.pretrained_model_name_or_path,
-    config_name="config.yaml",
-    weight_name="model.ckpt",
-)
-model.renderer.set_chunk_size(args.chunk_size)
-model.to(device)
-timer.end("Initializing model")
-
-timer.start("Processing images")
-images = []
-
-if args.no_remove_bg:
-    rembg_session = None
-else:
-    rembg_session = rembg.new_session()
-
-for i, image_path in enumerate(args.image):
-    if args.no_remove_bg:
-        image = np.array(Image.open(image_path).convert("RGB"))
-    else:
-        image = remove_background(Image.open(image_path), rembg_session)
-        image = resize_foreground(image, args.foreground_ratio)
-        image = np.array(image).astype(np.float32) / 255.0
-        image = image[:, :, :3] * image[:, :, 3:4] + (1 - image[:, :, 3:4]) * 0.5
-        image = Image.fromarray((image * 255.0).astype(np.uint8))
-        if not os.path.exists(os.path.join(output_dir, str(i))):
-            os.makedirs(os.path.join(output_dir, str(i)))
-        image.save(os.path.join(output_dir, str(i), f"input.png"))
-    images.append(image)
-timer.end("Processing images")
-
-for i, image in enumerate(images):
-    logging.info(f"Running image {i + 1}/{len(images)} ...")
-
-    timer.start("Running model")
-    with torch.no_grad():
-        scene_codes = model([image], device=device)
-    timer.end("Running model")
-
-    if args.render:
-        timer.start("Rendering")
-        render_images = model.render(scene_codes, n_views=30, return_type="pil")
-        for ri, render_image in enumerate(render_images[0]):
-            render_image.save(os.path.join(output_dir, str(i), f"render_{ri:03d}.png"))
-        save_video(
-            render_images[0], os.path.join(output_dir, str(i), f"render.mp4"), fps=30
-        )
-        timer.end("Rendering")
-
-    timer.start("Extracting mesh")
-    meshes = model.extract_mesh(scene_codes, not args.bake_texture, resolution=args.mc_resolution)
-    timer.end("Extracting mesh")
-
-    out_mesh_path = os.path.join(output_dir, str(i), f"mesh.{args.model_save_format}")
-    if args.bake_texture:
-        out_texture_path = os.path.join(output_dir, str(i), "texture.png")
-
-        timer.start("Baking texture")
-        bake_output = bake_texture(meshes[0], model, scene_codes[0], args.texture_resolution)
-        timer.end("Baking texture")
-
-        timer.start("Exporting mesh and texture")
-        xatlas.export(out_mesh_path, meshes[0].vertices[bake_output["vmapping"]], bake_output["indices"], bake_output["uvs"], meshes[0].vertex_normals[bake_output["vmapping"]])
-        Image.fromarray((bake_output["colors"] * 255.0).astype(np.uint8)).transpose(Image.FLIP_TOP_BOTTOM).save(out_texture_path)
-        timer.end("Exporting mesh and texture")
-    else:
-        timer.start("Cleaning and smoothing mesh")
-        clean_mesh = clean_and_smooth_mesh(
-            meshes[0],
-            keep_components=4,
-            taubin_iters=10,
-        )
-        timer.end("Cleaning and smoothing mesh")
-
-        timer.start("Exporting mesh")
-        o3d.io.write_triangle_mesh(out_mesh_path, clean_mesh)
-        timer.end("Exporting mesh")
-        # timer.start("Exporting mesh")
-        # meshes[0].export(out_mesh_path)
-        # timer.end("Exporting mesh")
