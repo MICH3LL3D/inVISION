@@ -94,7 +94,7 @@ BG = (20, 20, 30)
 WHITE = (240, 240, 240)
 BLUE = (100, 200, 255)
 TARGET_FPS = 30
-FACE_STEP = 15
+FACE_STEP = 5
 
 pygame.init()
 pygame.font.init()
@@ -381,7 +381,7 @@ def draw_obj_model_numpy(screen, vertices_np, faces_np, display_R, scale, fov, c
         pygame.draw.polygon(screen, WHITE, poly, 1)
 
 # OBJ Config
-OBJ_PATH = "chair.obj"   # manually chang this file name
+OBJ_PATH = "obj/Boeing KC-46A Pegasus.obj"   # manually change this file name
 vertices, faces = load_obj(OBJ_PATH)
 vertices = normalize_model(vertices, target_size=2.0)
 
