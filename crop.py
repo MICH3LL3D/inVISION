@@ -27,6 +27,9 @@ def crop_to_object(image_path):
     best_idx = int(boxes.conf.argmax())
     x1, y1, x2, y2 = map(int, boxes[best_idx].xyxy[0])
     label = model.names[int(boxes[best_idx].cls)]
+    
+    # Clean label for filename
+    label_clean = label.replace(" ", "_")
     conf = float(boxes[best_idx].conf)
 
     # Get the segmentation mask and resize to image dimensions
@@ -41,7 +44,7 @@ def crop_to_object(image_path):
     # Crop to bounding box
     cropped = bgra[y1:y2, x1:x2]
 
-    out_path = f"{name}_cropped.png"
+    out_path = f"{label_clean}.png"
     cv2.imwrite(out_path, cropped)
     print(f"Saved cropped '{label}' ({conf:.2f}) to {out_path}")
 
