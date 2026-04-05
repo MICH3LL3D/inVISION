@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>inVISION - Phone Camera</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: #0a0a14;
+            color: #e8e8f0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            text-align: center;
+            padding: 1rem;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #6c63ff, #00d4ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        header p {
+            color: #7a7a9e;
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+        }
+
+        .camera-wrap {
+            flex: 1;
+            display: flex;
+            position: relative;
+            margin: 0.5rem;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.75rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff4757;
+        }
+
+        .status-dot.connected {
+            background: #00d4ff;
+            box-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .status-dot.streaming {
+            background: #2ed573;
+            box-shadow: 0 0 8px rgba(46, 213, 115, 0.5);
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-text {
+            font-size: 0.85rem;
+            color: #7a7a9e;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: flex;
+            gap: 0.75rem;
+            padding: 0 1rem 1.5rem;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6c63ff, #8b7aff);
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(108, 99, 255, 0.35);
+        }
+
+        .btn-secondary {
+            background: rgba(16, 16, 32, 0.6);
+            color: #e8e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .fps {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(0,0,0,0.6);
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            color: #00d4ff;
+            font-weight: 600;
+            z-index: 2;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>inVISION</h1>
+        <p>Phone Camera Stream</p>
+    </header>
+
+    <div class="camera-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="fps" id="fps">-- fps</div>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-dot" id="status-dot"></div>
+        <span class="status-text" id="status-text">Not connected</span>
+    </div>
+
+    <div class="controls">
+        <button class="btn btn-primary" id="btn-start">Start Streaming</button>
+        <button class="btn btn-secondary" id="btn-flip">Flip</button>
+    </div>
+
+    <canvas id="capture" style="display:none"></canvas>
+
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script>
+        const video = document.getElementById("video");
+        const captureCanvas = document.getElementById("capture");
+        const ctx = captureCanvas.getContext("2d");
+        const btnStart = document.getElementById("btn-start");
+        const btnFlip = document.getElementById("btn-flip");
+        const statusDot = document.getElementById("status-dot");
+        const statusText = document.getElementById("status-text");
+        const fpsDisplay = document.getElementById("fps");
+
+        let stream = null;
+        let streaming = false;
+        let facingMode = "environment";
+        let frameCount = 0;
+        let lastFpsTime = performance.now();
+
+        // Connect to server - force websocket (needed for ngrok)
+        const socket = io({ transports: ["websocket"] });
+
+        socket.on("connect", () => {
+            statusDot.classList.add("connected");
+            statusText.textContent = "Connected - tap Start";
+        });
+
+        socket.on("disconnect", () => {
+            statusDot.classList.remove("connected", "streaming");
+            statusText.textContent = "Disconnected";
+        });
+
+        async function startCamera() {
+            if (stream) stream.getTracks().forEach(t => t.stop());
+
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+                audio: false
+            });
+            video.srcObject = stream;
+        }
+
+        function sendFrame() {
+            if (!streaming || !video.videoWidth) return;
+
+            // Resize small to minimize latency
+            const targetW = 320;
+            const scale = targetW / video.videoWidth;
+            captureCanvas.width = targetW;
+            captureCanvas.height = video.videoHeight * scale;
+
+            ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+
+            const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.4);
+            socket.volatile.emit("phone-frame", dataUrl);
+
+            // FPS counter
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFpsTime >= 1000) {
+                fpsDisplay.textContent = frameCount + " fps";
+                frameCount = 0;
+                lastFpsTime = now;
+            }
+
+            // Throttle to ~15fps to avoid backpressure
+            setTimeout(sendFrame, 66);
+        }
+
+        btnStart.addEventListener("click", async () => {
+            if (streaming) {
+                streaming = false;
+                btnStart.textContent = "Start Streaming";
+                statusDot.classList.remove("streaming");
+                statusText.textContent = "Connected - stopped";
+                return;
+            }
+
+            try {
+                await startCamera();
+                streaming = true;
+                btnStart.textContent = "Stop";
+                statusDot.classList.add("streaming");
+                statusText.textContent = "Streaming to laptop...";
+                statusText.textContent += " | socket connected: " + socket.connected;
+                statusText.textContent += " | video ready: " + video.readyState;
+                // Wait for video to be ready
+                video.addEventListener("playing", () => {
+                    statusText.textContent = "Camera playing, sending frames... | " + video.videoWidth + "x" + video.videoHeight;
+                    sendFrame();
+                }, { once: true });
+                // If already playing
+                if (video.readyState >= 3) {
+                    statusText.textContent = "Already playing, sending frames...";
+                    sendFrame();
+                }
+            } catch (err) {
+                alert("Camera error: " + err.message);
+            }
+        });
+
+        btnFlip.addEventListener("click", async () => {
+            facingMode = facingMode === "environment" ? "user" : "environment";
+            if (stream) await startCamera();
+        });
+    </script>
+</body>
+</html>

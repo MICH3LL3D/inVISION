@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>inVISION</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <img src="inVISIONTransparantLogo.png" alt="inVISION" class="logo-img">
+        <div class="header-text">
+            <h1 class="logo">inVISION</h1>
+        </div>
+        <nav class="steps-nav">
+            <div class="step-indicator active" data-step="1">
+                <span class="step-num">1</span>
+                <span class="step-label">Camera</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-indicator" data-step="2">
+                <span class="step-num">2</span>
+                <span class="step-label">Detect</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-indicator" data-step="3">
+                <span class="step-num">3</span>
+                <span class="step-label">3D Model</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-indicator" data-step="4">
+                <span class="step-num">4</span>
+                <span class="step-label">Interact</span>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Step 1: Camera -->
+        <section class="step-panel active" id="step-1">
+            <div class="panel-top">
+                <h2>Connect Your Camera</h2>
+                <p>Open this page on your iPhone or allow camera access to get started.</p>
+            </div>
+            <div class="panel-viewport">
+                <div class="camera-container">
+                    <video id="camera-feed" autoplay playsinline muted></video>
+                    <canvas id="phone-canvas" style="display:none; width:100%; height:100%; object-fit:cover;"></canvas>
+                    <div class="camera-overlay" id="camera-overlay">
+                        <span>Choose a camera source</span>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-bottom">
+                <div class="controls">
+                    <button id="btn-start-camera" class="btn btn-primary">Laptop Camera</button>
+                    <button id="btn-phone-camera" class="btn btn-primary">Phone Camera</button>
+                    <button id="btn-switch-camera" class="btn btn-secondary" disabled>Flip Camera</button>
+                    <button id="btn-take-photo" class="btn btn-primary" disabled>Take Photo</button>
+                    <button id="btn-upload-photo" class="btn btn-secondary">Upload Photo</button>
+                    <input type="file" id="file-upload" accept="image/*" style="display:none">
+                </div>
+                <div id="phone-status" class="phone-status hidden">Waiting for phone stream...</div>
+                <div class="step-actions">
+                    <span></span>
+                    <button class="btn btn-next" id="btn-to-detect" disabled>
+                        Next: Detect Object &rarr;
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 2: Object Detection -->
+        <section class="step-panel" id="step-2">
+            <div class="panel-top">
+                <h2>Detect Object</h2>
+                <p>Point your camera at an object. We'll detect and outline it for you.</p>
+            </div>
+            <div class="panel-viewport">
+                <div class="detection-container">
+                    <video id="detect-feed" autoplay playsinline muted></video>
+                    <canvas id="detect-canvas"></canvas>
+                    <div class="scan-line"></div>
+                    <div class="detection-info" id="detection-info">
+                        <span id="detected-label">No object detected</span>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-bottom">
+                <div class="controls">
+                    <button id="btn-capture" class="btn btn-primary" disabled>Capture Object</button>
+                </div>
+                <div id="captured-preview" class="captured-preview hidden">
+                    <canvas id="capture-canvas"></canvas>
+                    <p id="capture-label"></p>
+                </div>
+                <div class="step-actions">
+                    <button class="btn btn-back" id="btn-back-to-camera">&larr; Back</button>
+                    <button class="btn btn-next" id="btn-to-model" disabled>
+                        Next: Generate 3D Model &rarr;
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 3: 3D Model Generation -->
+        <section class="step-panel" id="step-3">
+            <div class="panel-top">
+                <h2>Generate 3D Model</h2>
+                <p>Converting your captured object into a 3D model.</p>
+            </div>
+            <div class="panel-viewport">
+                <div class="model-container">
+                    <div id="loading-spinner" class="spinner hidden">
+                        <div class="spinner-ring"></div>
+                        <p>Generating 3D model...</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <p class="progress-text" id="progress-text">0%</p>
+                    </div>
+                    <canvas id="model-preview-canvas"></canvas>
+                </div>
+            </div>
+            <div class="panel-bottom">
+                <div class="controls">
+                    <button id="btn-generate" class="btn btn-primary">Generate 3D Model</button>
+                    <button id="btn-regenerate" class="btn btn-secondary hidden">Regenerate</button>
+                </div>
+                <div class="step-actions">
+                    <button class="btn btn-back" id="btn-back-to-detect">&larr; Back</button>
+                    <button class="btn btn-next" id="btn-to-interact" disabled>
+                        Next: Hand Interaction &rarr;
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 4: Hand Interaction -->
+        <section class="step-panel" id="step-4">
+            <div class="panel-top">
+                <h2>Interact With Your Hands</h2>
+                <p>Use one hand to rotate, pinch with the other to scale. Press R to recenter.</p>
+            </div>
+            <div class="panel-viewport">
+                <div class="interact-viewport">
+                    <canvas id="three-canvas"></canvas>
+                    <video id="hand-feed" autoplay playsinline muted></video>
+                    <canvas id="hand-overlay"></canvas>
+                </div>
+            </div>
+            <div class="panel-bottom">
+                <div class="interact-hud">
+                    <div class="hud-item">
+                        <span class="hud-label">Hands</span>
+                        <span class="hud-value" id="hud-hands">0</span>
+                    </div>
+                    <div class="hud-item">
+                        <span class="hud-label">Scale</span>
+                        <span class="hud-value" id="hud-scale">1.0x</span>
+                    </div>
+                    <div class="hud-item">
+                        <span class="hud-label">Mode</span>
+                        <span class="hud-value" id="hud-mode">Waiting...</span>
+                    </div>
+                </div>
+                <div class="controls">
+                    <button id="btn-start-hands" class="btn btn-primary">Start Hand Tracking</button>
+                    <button id="btn-recenter" class="btn btn-secondary">Recenter (R)</button>
+                    <button id="btn-toggle-cam" class="btn btn-secondary">Toggle Camera View</button>
+                </div>
+                <div class="step-actions">
+                    <button class="btn btn-back" id="btn-back-to-model">&larr; Back</button>
+                    <button id="btn-reset-all" class="btn btn-danger">Start Over</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- External libs (CDN) -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <!-- SocketIO client -->
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+
+    <!-- App scripts -->
+    <script src="js/camera.js"></script>
+    <script src="js/detection.js"></script>
+    <script src="js/modelGen.js"></script>
+    <script type="module" src="js/handInteract.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
