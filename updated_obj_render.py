@@ -1,5 +1,4 @@
-# This file already contains great controls
-# Lowkey why is this one so good
+# Main file with best control scheme
 
 import mediapipe as mp
 import numpy as np
@@ -14,7 +13,7 @@ HandLandmarker = mp.tasks.vision.HandLandmarker
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 
-cap = cv2.VideoCapture(0) # 1 bc mac sucks
+cap = cv2.VideoCapture(0) # Sometimes need to use 1 if you're on Mac
 if not cap.isOpened():
     print("cannot open camera")
     exit()
@@ -45,7 +44,7 @@ def wrap_angle(a):
     return (a + 180) % 360 - 180
 
 def smooth_factor(speed, dt):
-    # Pure time based smoothing
+    # Time based smoothing for scale and rotation changes
     return 1.0 - math.exp(-speed * dt)
 
 def angle_delta(current, target):
@@ -77,7 +76,7 @@ def landmark_to_np(lm):
 def smooth_rotation_matrix(current_R, target_R, alpha):
     blended = (1.0 - alpha) * current_R + alpha * target_R
 
-    # Re-orthonormalize so it stays a valid rotation basis
+    # Re-orthonormalize so hand axes stay as a valid rotation basis
     x = blended[:, 0]
     y = blended[:, 1]
 
@@ -207,7 +206,7 @@ def get_hand_orientation(hand_landmarks):
     z_axis = normalize(np.cross(x_axis, y_temp))  # palm normal
     y_axis = normalize(np.cross(z_axis, x_axis))  # corrected orthogonal y
 
-    # rotation matrix
+    # rotation matrix based on palm axes
     R = np.column_stack((x_axis, y_axis, z_axis))
 
     sy = math.sqrt(R[0, 0] ** 2 + R[1, 0] ** 2)
@@ -231,14 +230,8 @@ def get_hand_orientation(hand_landmarks):
         "z_axis": z_axis,
     }
     
+# Simple finger counter for mode control
 def count_extended_fingers(hand_landmarks):
-    """
-    Simple heuristic finger counter.
-    Counts index/middle/ring/pinky by checking if tip is above pip in image space.
-    Counts thumb by checking horizontal separation from thumb IP joint.
-    Good enough for quick gesture mode switching.
-    """
-    # Landmark indices
     THUMB_TIP = 4
     THUMB_IP = 3
 
@@ -247,27 +240,19 @@ def count_extended_fingers(hand_landmarks):
 
     count = 0
 
-    # Index/middle/ring/pinky:
-    # In webcam image coordinates, smaller y = higher on screen
     for tip_idx, pip_idx in zip(finger_tips, finger_pips):
         if hand_landmarks[tip_idx].y < hand_landmarks[pip_idx].y:
             count += 1
 
-    # Thumb:
-    # crude heuristic: thumb tip significantly left/right of thumb IP
+    # Thumb: heuristic: thumb tip significantly left/right of thumb IP
+    # Doesn't work on other rotations but good enough for control scheme
     if abs(hand_landmarks[THUMB_TIP].x - hand_landmarks[THUMB_IP].x) > 0.04:
         count += 1
 
     return count
 
-
+# 1 = scale, 2 = rotate, else pause
 def get_mode_from_fingers(finger_count):
-    """
-    0 fingers -> pause
-    1 finger  -> scale
-    2 fingers -> rotate
-    anything else -> pause
-    """
     if finger_count == 1:
         return "scale"
     elif finger_count == 2:
@@ -295,14 +280,11 @@ def load_obj(filename):
                 face = []
 
                 for p in parts:
-                    # handles formats like:
-                    # f 1 2 3
-                    # f 1/1/1 2/2/2 3/3/3
-                    # f 1//1 2//2 3//3
+                    # Handles .obj parsing
                     idx = int(p.split("/")[0]) - 1
                     face.append(idx)
 
-                # triangulate faces with > 3 vertices
+                # triangulate faces with > 3 vertices if exists
                 if len(face) == 3:
                     faces.append(tuple(face))
                 elif len(face) > 3:
@@ -310,7 +292,6 @@ def load_obj(filename):
                         faces.append((face[0], face[i], face[i + 1]))
 
     return vertices, faces
-
 
 def normalize_model(vertices, target_size=2.0):
     arr = np.array(vertices, dtype=np.float32)
@@ -326,46 +307,10 @@ def normalize_model(vertices, target_size=2.0):
     arr = (arr - center) * (target_size / size)
     return [tuple(v) for v in arr]
 
-
-def face_normal(v0, v1, v2):
-    a = np.array(v1) - np.array(v0)
-    b = np.array(v2) - np.array(v0)
-    n = np.cross(a, b)
-    norm = np.linalg.norm(n)
-    if norm < 1e-9:
-        return np.array([0.0, 0.0, 1.0], dtype=np.float32)
-    return n / norm
-
-
-def shade_color(normal, light_dir=np.array([0.4, -0.5, -1.0], dtype=np.float32)):
-    light_dir = light_dir / np.linalg.norm(light_dir)
-
-    # Lambert shading
-    brightness = np.dot(normal, -light_dir)
-    brightness = max(0.15, min(1.0, brightness))
-
-    base = np.array([180, 210, 255], dtype=np.float32)
-    color = np.clip(base * brightness, 0, 255).astype(np.uint8)
-    return tuple(map(int, color))
-        
-def triangle_normal(v0, v1, v2):
-    a = np.array(v1, dtype=np.float32) - np.array(v0, dtype=np.float32)
-    b = np.array(v2, dtype=np.float32) - np.array(v0, dtype=np.float32)
-    n = np.cross(a, b)
-    mag = np.linalg.norm(n)
-    if mag < 1e-9:
-        return np.array([0.0, 0.0, 1.0], dtype=np.float32)
-    return n / mag
-
-
-def triangle_screen_bounds(poly):
-    xs = [p[0] for p in poly]
-    ys = [p[1] for p in poly]
-    return min(xs), min(ys), max(xs), max(ys)
-
+# Utilizes numpy matrix calculations to speed up rendering
 def draw_obj_model_numpy(screen, vertices_np, faces_np, display_R, scale, fov, camera_distance):
     # Transform all vertices at once
-    transformed = (vertices_np * scale) @ display_R.T   # shape: (N, 3)
+    transformed = (vertices_np * scale) @ display_R.T
 
     # Project all vertices at once
     z = transformed[:, 2] + camera_distance
@@ -432,11 +377,11 @@ def draw_obj_model_numpy(screen, vertices_np, faces_np, display_R, scale, fov, c
     draw_calls.sort(key=lambda item: item[0], reverse=True)
 
     for _, color, poly in draw_calls:
-        # pygame.draw.polygon(screen, color, poly)
+        # pygame.draw.polygon(screen, color, poly) # For efficiency's sake
         pygame.draw.polygon(screen, WHITE, poly, 1)
 
-# OBJ model
-OBJ_PATH = "chair.obj"   # change this to file name
+# OBJ Config
+OBJ_PATH = "chair.obj"   # manually chang this file name
 vertices, faces = load_obj(OBJ_PATH)
 vertices = normalize_model(vertices, target_size=2.0)
 
@@ -463,7 +408,7 @@ yaw_sensitivity = 1.5     # left/right
 pitch_sensitivity = 2.75   # up/down
 roll_sensitivity = 1.2  # side/side
 
-# combined loop
+# combined loop (pygame + opencv)
 with HandLandmarker.create_from_options(options) as landmarker:
     # Pygame loop
     running = True
@@ -543,7 +488,7 @@ with HandLandmarker.create_from_options(options) as landmarker:
 
                 rel_R = current_R @ neutral_R.T
 
-                # Convert to Euler angles
+                # Convert hand orientation to Euler angles
                 roll, yaw, pitch = rotation_matrix_to_euler(rel_R)
 
                 # Apply per-axis sensitivity scaling
@@ -720,9 +665,9 @@ with HandLandmarker.create_from_options(options) as landmarker:
         text1 = font.render(f"Cube scale: {scale:.1f}", True, WHITE)
         text_rot = font.render("Palm camera rotation: matrix mode", True, WHITE)
         text_target = font.render("2 hands: other hand selects mode | 1 finger scale | 2 rotate | 0 pause", True, WHITE)
-        screen.blit(text_rot, (20, 80))
-        screen.blit(text_target, (20, 110))
         screen.blit(text1, (20, 20))
+        screen.blit(text_rot, (20, 50))
+        screen.blit(text_target, (20, 80))
 
         pygame.display.flip()
     

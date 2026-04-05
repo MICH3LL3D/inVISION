@@ -56,3 +56,5 @@ weights/
 *.png
 
 node-tailwind-python-site
+
+rf_env
