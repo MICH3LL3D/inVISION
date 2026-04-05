@@ -1,6 +1,7 @@
 <p align="center">
   <img src="/inVISION_logo.png" alt="inVISION Logo" width="50%" height=auto>
-  # inVISION
+  <br>
+  # inVISION (H1)
   <br>
   <i>“Envisioning ideas into reality”</i>
   <br>
