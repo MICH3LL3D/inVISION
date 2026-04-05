@@ -94,8 +94,8 @@ WIDTH, HEIGHT = 1000, 700
 BG = (20, 20, 30)
 WHITE = (240, 240, 240)
 BLUE = (100, 200, 255)
-TARGET_FPS = 12
-FACE_STEP = 20
+TARGET_FPS = 30
+FACE_STEP = 30
 
 pygame.init()
 pygame.font.init()
@@ -392,12 +392,13 @@ def draw_obj_model_numpy(screen, vertices_np, faces_np, display_R, scale, fov, c
         pygame.draw.polygon(screen, WHITE, poly, 1)
 
 # OBJ model
-OBJ_PATH = "mesh 3.obj"   # change this to your actual file name
+OBJ_PATH = "mesh.obj"   # change this to file name
 vertices, faces = load_obj(OBJ_PATH)
 vertices = normalize_model(vertices, target_size=2.0)
 
 vertices_np = np.array(vertices, dtype=np.float32)
 faces_np = np.array(faces, dtype=np.int32)
+faces_draw_np = faces_np[::FACE_STEP]
 
 scale = 120.0
 target_scale = 120.0

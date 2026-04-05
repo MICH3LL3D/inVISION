@@ -54,3 +54,5 @@ weights/
 *.onnx
 *.jpeg
 *.png
+
+node-tailwind-python-site
