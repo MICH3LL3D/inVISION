@@ -206,6 +206,36 @@ const HandInteract = (() => {
         running = false;
     }
 
+    /**
+     * Count extended fingers on a hand.
+     * Mirrors count_extended_fingers() from updated_obj_render.py.
+     */
+    function countExtendedFingers(landmarks) {
+        const fingerTips = [8, 12, 16, 20];
+        const fingerPips = [6, 10, 14, 18];
+
+        let count = 0;
+        for (let i = 0; i < fingerTips.length; i++) {
+            if (landmarks[fingerTips[i]].y < landmarks[fingerPips[i]].y) {
+                count++;
+            }
+        }
+
+        // Thumb heuristic: tip significantly left/right of IP joint
+        if (Math.abs(landmarks[4].x - landmarks[3].x) > 0.04) {
+            count++;
+        }
+
+        return count;
+    }
+
+    /** 1 finger = scale, 2 fingers = rotate, else = pause */
+    function getModeFromFingers(fingerCount) {
+        if (fingerCount === 1) return "scale";
+        if (fingerCount === 2) return "rotate";
+        return "pause";
+    }
+
     function detectHands() {
         if (!running || !handLandmarker) return;
 
@@ -223,37 +253,40 @@ const HandInteract = (() => {
             const hands = results.landmarks || [];
             const numHands = hands.length;
 
-            if (numHands > 0) {
-                const rotationHand = hands[0];
-                const scaleHand = hands.length > 1 ? hands[1] : null;
+            // Draw all detected hand landmarks
+            for (const hand of hands) {
+                drawHandLandmarks(hand);
+            }
 
-                // Draw hand landmarks on overlay
-                for (const hand of hands) {
-                    drawHandLandmarks(hand);
-                }
+            if (numHands >= 2) {
+                const controlHand = hands[0];
+                const modeHand = hands[1];
 
-                // Rotation from first hand
-                const currentR = handRotationMatrix(rotationHand);
+                const fingerCount = countExtendedFingers(modeHand);
+                const mode = getModeFromFingers(fingerCount);
 
-                if (!handPresentLastFrame || !neutralR) {
-                    neutralR = currentR.clone();
-                }
+                if (mode === "rotate") {
+                    const currentR = handRotationMatrix(controlHand);
 
-                // Relative rotation: current * inverse(neutral)
-                const neutralInv = neutralR.clone().invert();
-                const relR = new THREE.Matrix4()
-                    .copy(currentR)
-                    .multiply(neutralInv);
+                    // Recenter on first frame entering rotate mode
+                    if (!handPresentLastFrame || !neutralR) {
+                        neutralR = currentR.clone();
+                    }
 
-                // Object should move opposite (palm acts as camera)
-                targetR = relR.clone().invert();
+                    // Relative rotation: current * inverse(neutral)
+                    const neutralInv = neutralR.clone().invert();
+                    const relR = new THREE.Matrix4()
+                        .copy(currentR)
+                        .multiply(neutralInv);
 
-                // Scale from second hand (pinch)
-                if (scaleHand) {
-                    const thumbTip = scaleHand[4];
-                    const indexTip = scaleHand[8];
-                    const wrist = scaleHand[0];
-                    const middleMcp = scaleHand[9];
+                    // Object moves opposite (palm acts as camera)
+                    targetR = relR.clone().invert();
+
+                } else if (mode === "scale") {
+                    const thumbTip = controlHand[4];
+                    const indexTip = controlHand[8];
+                    const wrist = controlHand[0];
+                    const middleMcp = controlHand[9];
 
                     const pinchDist = distance2D(thumbTip, indexTip);
                     const refDist = distance2D(wrist, middleMcp);
@@ -273,25 +306,25 @@ const HandInteract = (() => {
                             minScale + normalized * (maxScale - minScale);
                     }
                 }
+                // pause: do not update targetR or targetScale
 
-                handPresentLastFrame = true;
+                // handPresentLastFrame tracks whether we were in rotate mode
+                handPresentLastFrame = mode === "rotate";
 
                 if (hudCallback) {
                     hudCallback({
                         hands: numHands,
                         scale: currentScale.toFixed(1),
-                        mode: scaleHand
-                            ? "Rotate + Scale"
-                            : "Rotate",
+                        mode: `${mode} (${fingerCount} finger${fingerCount !== 1 ? "s" : ""})`,
                     });
                 }
             } else {
                 handPresentLastFrame = false;
                 if (hudCallback) {
                     hudCallback({
-                        hands: 0,
+                        hands: numHands,
                         scale: currentScale.toFixed(1),
-                        mode: "Waiting...",
+                        mode: numHands === 1 ? "Waiting for mode hand" : "Waiting...",
                     });
                 }
             }
