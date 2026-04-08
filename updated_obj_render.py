@@ -94,7 +94,7 @@ BG = (20, 20, 30)
 WHITE = (240, 240, 240)
 BLUE = (100, 200, 255)
 TARGET_FPS = 30
-FACE_STEP = 5
+FACE_STEP = 20
 
 pygame.init()
 pygame.font.init()

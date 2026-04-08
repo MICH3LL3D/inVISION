@@ -44,7 +44,7 @@ httpx==0.28.1
 huggingface_hub==1.9.0
 humanfriendly==10.0
 # Editable install with no version control (hy3dgen==2.0.2)
--e /Users/michelledong/Downloads/Hunyuan3D-2
+# -e /Users/michelledong/Downloads/Hunyuan3D-2
 idna==3.11
 ImageIO==2.37.3
 importlib_metadata==9.0.0
@@ -129,7 +129,7 @@ tifffile==2025.5.10
 tokenizers==0.22.2
 tomlkit==0.13.3
 torch==2.11.0
-torchmcubes @ git+https://github.com/tatsy/torchmcubes.git@3381600ddc3d2e4d74222f8495866be5fafbace4
+git+https://github.com/tatsy/torchmcubes.git@3381600ddc3d2e4d74222f8495866be5fafbace4
 torchvision==0.26.0
 tqdm==4.67.3
 traitlets==5.14.3
